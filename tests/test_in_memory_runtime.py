@@ -16,8 +16,8 @@ def test_ttl_cache_returns_value_until_expiry():
     assert cache.get("webhook:42") is None
 
 
-def test_runtime_source_has_no_database_or_redis_imports():
-    forbidden = {"database", "redis"}
+def test_runtime_source_has_no_external_store_or_airflow_imports():
+    forbidden = {"database", "redis", "airflow", "dags"}
     violations = []
     for path in Path("exchange").rglob("*.py"):
         tree = ast.parse(path.read_text(), filename=str(path))

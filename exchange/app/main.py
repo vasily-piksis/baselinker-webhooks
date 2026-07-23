@@ -33,6 +33,8 @@ from exchange.app.middleware.exception_handlers import (
     validation_exception_handler,
 )
 from exchange.app.routes import (
+    baselinker_router,
+    exchange_router,
     health_router,
     webhooks_router,
 )
@@ -74,3 +76,5 @@ app.add_exception_handler(RequestValidationError, cast(Any, validation_exception
 # Include routers
 app.include_router(health_router)
 app.include_router(webhooks_router)
+app.include_router(baselinker_router)
+app.include_router(exchange_router)

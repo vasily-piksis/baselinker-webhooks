@@ -15,11 +15,11 @@ The application exposes the existing BaseLinker-compatible endpoints:
 - `POST /product/delete`
 - `GET /health`, `GET /healthz`, and `GET /readyz`
 
-Every webhook is authenticated with the configured BaseLinker pass, processed synchronously, persisted to Postgres, and answered in the response format expected by BaseLinker. It continues to call BaseLinker and Discogs where the existing inventory logic requires them.
+Every webhook and connector request is authenticated with the configured BaseLinker pass, processed synchronously, and answered in the response format expected by BaseLinker. It calls Discogs where the inventory and order flows require it; it does not persist requests locally.
 
 ## Architecture
 
-`baselinker-webhooks` is a standalone Python package and Docker build context. It contains only the modules transitively needed by the webhook and inventory flow: API routes and middleware, authentication and logging, inventory processors, BaseLinker and Discogs clients, database models/repositories/migrations, and their shared utilities.
+`baselinker-webhooks` is a standalone Python package and Docker build context. It contains only the modules transitively needed by the webhook, Exchange protocol, and inventory flow: API routes and middleware, authentication and logging, inventory processors, BaseLinker and Discogs clients, connector translation, and their shared utilities.
 
 The application must not import `airflow`, `dags`, or use Airflow Variables/Connections as a configuration fallback. The Basecom processor's Airflow trigger path is removed; no replacement trigger is introduced.
 
@@ -37,7 +37,7 @@ Required credentials/configuration:
 - `BL_INVENTORY_ID`, `BL_SHOP_ID`, `BL_WAREHOUSE_ID`, and `BL_PRICE_GROUP_ID`
 - `BASELINKER_EXPORT_ADD_URL` and `BASELINKER_EXPORT_UPDATE_URL` when the current inventory flow uses these endpoints
 
-Optional operational settings keep their current defaults: HTTP timeouts/rate limits, Redis rate-limit URL, cache TTLs, database pool configuration, `EXCHANGE_DIR`, and `APP_BUILD_SHA`.
+Optional operational settings keep their current defaults: HTTP timeouts/rate limits, process-local cache TTLs, and `APP_BUILD_SHA`.
 
 No `AIRFLOW_*` variables, Airflow image, DAG directory, or Airflow Python dependency is part of this application.
 
@@ -52,5 +52,5 @@ Tests are migrated or added for the webhook endpoints: authentication, BaseLinke
 ## Non-goals
 
 - Airflow, DAG scheduling, queues, or any external trigger after a webhook.
-- Migrating or changing existing database data.
+- Migrating or changing existing database data (there is no database in this service).
 - Changing the existing webhook business rules beyond removing Airflow coupling.

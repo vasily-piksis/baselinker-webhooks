@@ -1,12 +1,13 @@
 # BaseLinker Webhooks
 
-Standalone FastAPI service for the BaseLinker product webhooks. It processes
-requests synchronously and has no Airflow, DAG, queue, or post-webhook trigger.
+Standalone FastAPI service for the full BaseLinker connector and product
+webhooks. It processes requests synchronously and has no Airflow, DAG, queue,
+database, Redis, or post-webhook trigger.
 
 ## Configuration
 
 Copy the required credentials into `.env`; start from `.env.example`. The
-service requires BaseLinker, Discogs, Postgres, and inventory settings listed
+service requires only the BaseLinker, Discogs, and inventory settings listed
 there. `.env` is excluded from both Git and Docker build context.
 
 ## Run
@@ -27,4 +28,14 @@ volume; caches and request throttling live only in the running process.
 - `POST /product/quantity/update`
 - `POST /product/price/update`
 - `POST /product/delete`
+- `GET` / `POST /exchange` — BaseLinker Exchange protocol, including discovery,
+  products, prices, quantities, categories, orders, statuses, delivery and
+  payment methods
+- `POST /bl/products/list`, `/bl/products/data`, `/bl/products/add`,
+  `/bl/products/quantity`, `/bl/products/quantity/update`, `/bl/products/delete`
+- `POST /bl/orders/list`, `/bl/orders/get`, `/bl/orders/status`
 - `GET /health`, `GET /healthz`, `GET /readyz`
+
+The product catalog and order reads are fetched from Discogs. Short-lived
+snapshots, rate limiting, duplicate protection, and created categories exist
+only in the running process and are deliberately lost on restart.
