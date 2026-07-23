@@ -1,0 +1,39 @@
+services:
+  baselinker-webhooks:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: baselinker-webhooks
+    env_file:
+      - .env
+    environment:
+      EXCHANGE_DIR: /app/data/exchange
+    volumes:
+      - webhook_data:/app/data/exchange
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.baselinker-webhooks.rule=Host(`bl-sync.musicseller.pro`)"
+      - "traefik.http.routers.baselinker-webhooks.entrypoints=web"
+      - "traefik.http.routers.baselinker-webhooks-secure.rule=Host(`bl-sync.musicseller.pro`)"
+      - "traefik.http.routers.baselinker-webhooks-secure.entrypoints=websecure"
+      - "traefik.http.routers.baselinker-webhooks-secure.tls.certresolver=myresolver"
+      - "traefik.http.middlewares.baselinker-webhooks-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.baselinker-webhooks-redirect.redirectscheme.permanent=true"
+      - "traefik.http.routers.baselinker-webhooks.middlewares=baselinker-webhooks-redirect"
+      - "traefik.http.services.baselinker-webhooks.loadbalancer.server.port=8000"
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    external: true
+
+volumes:
+  webhook_data:

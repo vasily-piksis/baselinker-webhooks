@@ -1,0 +1,1 @@
+"""Standalone BaseLinker webhook application."""
