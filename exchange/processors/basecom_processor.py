@@ -19,9 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 from uuid import UUID
 
-from database.repositories.basecom_export_repository import BasecomExportRepository
 from exchange.errors import NotFoundError, ProcessorError
-from database.session import get_session
 from exchange.settings import (
     BASECOM_FILE_FORMAT,
     BASECOM_FILE_PREFIX,
@@ -129,19 +127,13 @@ def _export_bytes_from_rows(
     )
 
 
-def _basecom_filename(action: str, export_id: UUID, file_format: str) -> str:
-    normalized = _normalize_action(action)
-    timestamp = _utc_timestamp()
-    return f"{BASECOM_FILE_PREFIX}_{normalized}_{timestamp}_{str(export_id)[:8]}.{file_format}"
-
-
 def write_basecom_file(
     payload_rows: List[Dict[str, str]],
     *,
     action: str,
     event_token: Optional[str],
 ) -> Optional[str]:
-    """Store Base.com export rows in the database.
+    """Compatibility no-op: Base.com artifacts are not persisted.
 
     Args:
         payload_rows: List of row dictionaries
@@ -149,78 +141,14 @@ def write_basecom_file(
         event_token: Optional event token
 
     Returns:
-        Export record id, or None if no rows
+        Always ``None``.
     """
-    if not payload_rows:
-        return None
-
-    file_format = BASECOM_FILE_FORMAT or "csv"
-    with get_session() as session:
-        repo = BasecomExportRepository(session)
-        record = repo.create_export_record(
-            action=action,
-            rows=payload_rows,
-            file_format=file_format,
-        )
-        session.commit()
-
-    export_id = record.export_id
-    export_bytes, content_type = _export_bytes_from_rows(payload_rows, file_format)
-    filename = _basecom_filename(action, export_id, file_format)
-
-    delivery_status = "pending"
-    delivery_response: Dict[str, str] = {"mode": "local"}
-    if event_token:
-        delivery_response["event_token"] = event_token
-    delivered_at = None
-    try:
-        response = _deliver_basecom_export(export_bytes, filename, content_type)
-        delivery_status = "delivered"
-        delivery_response.update(response)
-        delivered_at = datetime.now(timezone.utc)
-    except Exception as exc:
-        delivery_status = "failed"
-        delivery_response["error"] = str(exc)
-        log.error("Base.com delivery failed for %s: %s", export_id, exc)
-
-    with get_session() as session:
-        repo = BasecomExportRepository(session)
-        repo.update_delivery_status(
-            export_id,
-            delivered_at=delivered_at,
-            delivery_status=delivery_status,
-            delivery_response=delivery_response,
-        )
-        session.commit()
-
-    return str(export_id)
+    del payload_rows, action, event_token
+    return None
 
 
-def generate_basecom_export_bytes_for_record(
-    record_id: str | UUID,
-) -> Tuple[bytes, str]:
-    """Generate export bytes from a stored Base.com export record.
-
-    Args:
-        record_id: Export record identifier.
-
-    Returns:
-        Tuple of (export bytes, content type).
-
-    Raises:
-        NotFoundError: If the export record is not found.
-    """
-    export_id = UUID(str(record_id))
-    with get_session() as session:
-        repo = BasecomExportRepository(session)
-        record = repo.get_export_by_id(export_id)
-        if not record:
-            raise NotFoundError(
-                f"Base.com export record not found: {record_id}",
-                error_code="basecom_export_not_found",
-            )
-        export_bytes, content_type = _export_bytes_from_rows(record.rows or [], record.format)
-        return export_bytes, content_type
+def generate_basecom_export_bytes_for_record(record_id: str | UUID) -> Tuple[bytes, str]:
+    raise NotFoundError("Base.com exports are not retained", error_code="basecom_export_not_found")
 
 
 def _deliver_basecom_export(payload: bytes, filename: str, content_type: str) -> Dict[str, str]:

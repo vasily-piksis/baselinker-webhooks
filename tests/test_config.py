@@ -8,12 +8,10 @@ def test_settings_reads_required_webhook_values(monkeypatch):
     monkeypatch.setenv("BL_ALLOWED_PASSES", "pass-a,pass-b")
     monkeypatch.setenv("DISCOGS_TOKEN", "discogs-token")
     monkeypatch.setenv("DISCOGS_UA", "webhooks-test/1.0")
-    monkeypatch.setenv("APP_DATABASE_URL", "sqlite:///test.db")
 
     settings = Settings.from_env()
 
     assert settings.bl_allowed_passes == {"pass-a", "pass-b"}
-    assert settings.app_database_url == "sqlite:///test.db"
 
 
 def test_settings_has_no_airflow_fields(monkeypatch):

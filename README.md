@@ -17,8 +17,8 @@ docker compose ps
 ```
 
 The Compose stack joins the pre-existing external `traefik` network and serves
-`bl-sync.musicseller.pro`. It uses the existing Postgres configured by
-`APP_DATABASE_URL`; no database service or migration is run automatically.
+`bl-sync.musicseller.pro`. It has no database, Redis, migration, or persistent
+volume; caches and request throttling live only in the running process.
 
 ## Endpoints
 

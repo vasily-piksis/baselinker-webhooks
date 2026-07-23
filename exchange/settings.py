@@ -4,12 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
-
-# Centralized runtime configuration. EXCHANGE_DIR is used for optional export artifacts.
-
-EXCHANGE_DIR = Path(os.getenv("EXCHANGE_DIR", "./data/exchange")).resolve()
-EXCHANGE_DIR.mkdir(parents=True, exist_ok=True)
 
 BASECOM_FILE_PREFIX = os.getenv("BASECOM_FILE_PREFIX", "basecom_export")
 BASECOM_FILE_FORMAT = os.getenv("BASECOM_FILE_FORMAT", "csv").lower()
@@ -54,7 +48,6 @@ except Exception:
     BL_STATUS_NAME_MAP = {}
 
 __all__ = [
-    "EXCHANGE_DIR",
     "BASECOM_FILE_PREFIX",
     "BASECOM_FILE_FORMAT",
     "DISCOGS_CSV_PREFIX",

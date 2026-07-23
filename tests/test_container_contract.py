@@ -18,3 +18,19 @@ def test_dockerfile_runs_only_webhook_app():
 
     assert "exchange.app:app" in dockerfile
     assert "airflow" not in dockerfile
+
+
+def test_runtime_configuration_has_no_external_store_settings():
+    example = Path(".env.example").read_text()
+
+    assert "APP_DATABASE_URL" not in example
+    assert "RATE_LIMITER_REDIS_URL" not in example
+
+
+def test_requirements_exclude_database_and_redis_clients():
+    requirements = Path("requirements.txt").read_text().lower()
+
+    assert "sqlalchemy" not in requirements
+    assert "alembic" not in requirements
+    assert "psycopg2" not in requirements
+    assert "redis" not in requirements

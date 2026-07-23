@@ -15,10 +15,8 @@ import html
 import json
 import logging
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
-from uuid import UUID
 
 from exchange.clients.discogs_client import (
     create_listing,
@@ -58,10 +56,6 @@ from exchange.utils.recent_result_cache import (
     store_recent_result,
 )
 from exchange.utils import normalize_action
-from database.repositories.discogs_csv_repository import DiscogsCsvRepository
-from database.repositories.event_repository import EventRepository
-from database.repositories.idempotency_repository import IdempotencyRepository
-from database.session import get_session
 
 log = logging.getLogger("exchange.processors.inventory")
 
@@ -116,8 +110,8 @@ def _persist_event(
     detail: Dict[str, Any],
     *,
     idempotency_token: Optional[str] = None,
-) -> UUID:
-    """Persist an inventory event to the database.
+) -> None:
+    """Retain no event: the webhook runtime is intentionally stateless.
 
     Args:
         action: Normalized inventory action name.
@@ -129,22 +123,8 @@ def _persist_event(
     Returns:
         UUID for the persisted event.
     """
-    # Merge detail into payload since model doesn't have detail field yet
-    # This matches the migration script strategy
-    payload_with_detail = payload.copy()
-    if detail:
-        payload_with_detail["_migration_detail"] = detail
-
-    with get_session() as session:
-        repo = EventRepository(session)
-        event = repo.create_event(
-            action=action,
-            payload=payload_with_detail,
-            status=status,
-            idempotency_token=idempotency_token,
-        )
-        session.commit()
-        return cast(UUID, event.event_id)
+    del action, payload, status, detail, idempotency_token
+    return None
 
 
 def _discogs_action_for_exchange(act: str) -> str:
@@ -1868,7 +1848,7 @@ def _invalidate_cached_listing(listing_id: Any) -> None:
 
 
 def _load_idempotent_result(digest: str) -> Optional[Dict[str, Any]]:
-    """Load an idempotent result from the database.
+    """Load an idempotent result from the in-memory TTL cache.
 
     Args:
         digest: Idempotency digest to look up.
@@ -1876,33 +1856,20 @@ def _load_idempotent_result(digest: str) -> Optional[Dict[str, Any]]:
     Returns:
         Cached result payload if found, otherwise None.
     """
-    try:
-        with get_session() as session:
-            repo = IdempotencyRepository(session)
-            record = repo.get_by_digest(digest)
-            if record:
-                result = dict(record.result) if record.result else {}
-                result.setdefault("idempotency_token", digest)
-                return result
-    except Exception as e:
-        log.warning("Failed to read idempotency from DB: %s", e)
-    return None
+    result = load_recent_result("idempotency", digest)
+    if result is not None:
+        result.setdefault("idempotency_token", digest)
+    return result
 
 
 def _store_idempotent_result(digest: str, result: Dict[str, Any]) -> None:
-    """Store an idempotent result in the database.
+    """Store an idempotent result in the in-memory TTL cache.
 
     Args:
         digest: Idempotency digest key.
         result: Result payload to store.
     """
-    try:
-        with get_session() as session:
-            repo = IdempotencyRepository(session)
-            repo.create_or_update(digest, result)
-            session.commit()
-    except Exception as e:
-        log.error("Failed to store idempotency to DB: %s", e)
+    store_recent_result("idempotency", digest, result, ttl_seconds=RECENT_SUCCESS_CACHE_TTL)
 
 
 def process_inventory_event(
@@ -1960,7 +1927,7 @@ def process_inventory_event(
             else:
                 return cached
 
-    event_id: UUID | None = None
+    event_id: None = None
     detail: Dict[str, Any]
     result: Dict[str, Any]
     if _is_quantity_update_action(act):
@@ -2198,23 +2165,6 @@ def process_inventory_event(
                 _store_idempotent_result(token, result)
             return result
 
-        if discogs_csv_record_id:
-            try:
-                with get_session() as session:
-                    repo = DiscogsCsvRepository(session)
-                    repo.update_upload_status(
-                        UUID(discogs_csv_record_id),
-                        uploaded_at=datetime.now(timezone.utc),
-                        upload_response=response,
-                    )
-                    session.commit()
-            except Exception as exc:  # pragma: no cover - db/env specific
-                log.warning(
-                    "Failed to update Discogs CSV upload status %s: %s",
-                    discogs_csv_record_id,
-                    exc,
-                )
-
     basecom_rows = build_basecom_rows(exchange_rows, rows)
     basecom_export_record_id: Optional[str] = None
     if basecom_rows:
@@ -2279,48 +2229,9 @@ def process_inventory_event(
     return result
 
 
-def reprocess_event(event_id: UUID) -> Dict[str, Any]:
-    """Reprocess an event from the database.
-
-    Args:
-        event_id: The event UUID
-
-    Returns:
-        Result dictionary
-    """
-    with get_session() as session:
-        repo = EventRepository(session)
-        event = repo.get_event_by_id(event_id)
-        if not event:
-            return {
-                "status": "ERROR",
-                "reason": "event_not_found",
-                "event_id": str(event_id),
-            }
-
-        # Extract data from event
-        action = event.action
-        payload = event.payload
-        token = event.idempotency_token
-
-        # Process
-        result = process_inventory_event(
-            action,
-            payload,
-            persist=False,
-            idempotency_key=token,
-            force=True,
-        )
-
-        # Update event status in DB
-        new_status = result.get("status", "QUEUED")
-
-        # EventRepository.update_event_status updates status and processed_at
-        processed_at = datetime.now(timezone.utc) if new_status == "OK" else None
-        repo.update_event_status(event_id, new_status, processed_at=processed_at)
-
-        session.commit()
-        return {"event_id": str(event_id), **result}
+def reprocess_event(event_id: str) -> Dict[str, Any]:
+    del event_id
+    return {"status": "ERROR", "reason": "event_replay_not_available"}
 
 
 def _parse_event_ref(value: Path | str | UUID) -> Optional[UUID]:

@@ -6,10 +6,6 @@ services:
     container_name: baselinker-webhooks
     env_file:
       - .env
-    environment:
-      EXCHANGE_DIR: /app/data/exchange
-    volumes:
-      - webhook_data:/app/data/exchange
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
@@ -34,6 +30,3 @@ services:
 networks:
   traefik:
     external: true
-
-volumes:
-  webhook_data:

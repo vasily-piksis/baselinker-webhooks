@@ -16,12 +16,9 @@ import io
 import json
 import logging
 from typing import Any, Dict, Iterable, List
-from uuid import UUID
 
 from exchange.utils.mapping import exchange_row_to_discogs_listing
 from exchange.master import hydrate_exchange_row
-from database.repositories.discogs_csv_repository import DiscogsCsvRepository
-from database.session import get_session
 from exchange.errors import NotFoundError, ValidationError
 
 log = logging.getLogger("exchange.processors.discogs_csv")
@@ -449,8 +446,8 @@ def write_discogs_csv_file(
     rows: List[Dict[str, Any]],
     *,
     idempotency_token: str | None,
-) -> str:
-    """Store Discogs CSV rows in the database.
+) -> str | None:
+    """Validate a bulk-upload payload without persisting it.
 
     Args:
         action: The action name
@@ -458,26 +455,15 @@ def write_discogs_csv_file(
         idempotency_token: Optional idempotency token
 
     Returns:
-        Record id for the stored CSV rows
+        ``None`` because the stateless service does not retain CSV records.
 
     Raises:
         ValidationError: If rows is empty
     """
     if not rows:
         raise ValidationError("rows must not be empty", error_code="validation_error")
-    with get_session() as session:
-        repo = DiscogsCsvRepository(session)
-        if idempotency_token:
-            existing = repo.get_by_idempotency_token(idempotency_token)
-            if existing:
-                return str(existing.record_id)
-        record = repo.create_csv_record(
-            action=action.replace(".", "").lower(),
-            rows=rows,
-            idempotency_token=idempotency_token,
-        )
-        session.commit()
-        return str(record.record_id)
+    del action, idempotency_token
+    return None
 
 
 def generate_discogs_csv_text(rows: Iterable[Dict[str, Any]]) -> str:
@@ -492,29 +478,8 @@ def generate_discogs_csv_text(rows: Iterable[Dict[str, Any]]) -> str:
     return _csv_text_from_rows(rows)
 
 
-def generate_discogs_csv_text_for_record(record_id: str | UUID) -> str:
-    """Generate CSV text for a stored Discogs CSV record.
-
-    Args:
-        record_id: CSV record identifier.
-
-    Returns:
-        CSV content as a string.
-
-    Raises:
-        NotFoundError: If the CSV record does not exist.
-    """
-    record_uuid = UUID(str(record_id))
-    with get_session() as session:
-        repo = DiscogsCsvRepository(session)
-        record = repo.get_by_record_id(record_uuid)
-        if not record:
-            raise NotFoundError(
-                f"Discogs CSV record not found: {record_id}",
-                error_code="discogs_csv_not_found",
-            )
-        rows = record.rows or []
-        return _csv_text_from_rows(rows)
+def generate_discogs_csv_text_for_record(record_id: str) -> str:
+    raise NotFoundError("Discogs CSV records are not retained", error_code="discogs_csv_not_found")
 
 
 __all__ = [
